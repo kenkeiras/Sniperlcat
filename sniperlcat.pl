@@ -59,7 +59,8 @@ if ($< == 0){
 # Todos los avisos van aquí
 sub show_alert{
     $message = $_[0];
-    open(T, "| $trigger")
+    open(T, "| $trigger");
+
     print T "$message";
     close(T);
 }
@@ -79,7 +80,7 @@ sub daemonize{
 # Muestra las opciones
 sub show_help{
         print "$appname $appver\n";
-        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>][-l <log>][-s <tiempo>]\n";
+        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>] [-l <log>] [-s <tiempo>]\n";
         print "-h  (--help): Muestra este mensaje\n";
         print "-d  (--daemonize): Se ejecuta de fondo\n";
         print "-nf (--no-fill): No llena la tabla de hosts (con nmap) antes de leerla\n";
@@ -201,7 +202,8 @@ if ($privileged){
 
 # Sniffer de packetes SYN de sockets RAW
 sub raw_sniffer{
-    my $filter_str = 'tcp and ip[6] & 127 == 0 and tcp[13] == 2'; # Flag SYN arriba y demás abajo, y DF OFF
+    # Flag SYN arriba y demás abajo, y DF OFF
+    my $filter_str = 'tcp and ip[6] & 127 == 0 and tcp[13] == 2'; 
     my $dev = $_[0];
     my $odev = Net::Pcap::open_live($dev, 1500, 0, 0, \$err);
     my $filter_compiled;
@@ -301,7 +303,7 @@ sub check_list{
                     # Si la MAC está repetida, probablemente haya spoofing
                     foreach my $tmpip (keys %$ip_list){
                         if (($ip_list->{$tmpip} eq $mac) && ($tmpip ne $ip)){
-                            $message .= ", posiblemente spoofeado desde $tmpip";
+                            $message.=", posiblemente spoofeado desde $tmpip";
                         }
                     }
                 }
@@ -313,14 +315,19 @@ sub check_list{
             # Si cambio la MAC
             if ($ip_list->{$ip} ne $mac){
                 if (($lastlist->{$ip} ne $mac)||($cansino)){
-                    my $message = "La MAC de $ip ha cambiado de [".$lastlist->{$ip}."] a [".$mac."]";
-                    if ($mac ne "00:00:00:00:00"){ # Se suele utilizar para tapar
-                                                   # despues de arp spoofing.
-                                                   # No aporta nada
+                    my $message = "La MAC de $ip ha cambiado de [".\
+                        $lastlist->{$ip}."] a [".$mac."]";
+
+                    if ($mac ne "00:00:00:00:00"){ # Se suele utilizar para
+                                                   #  tapar despues de arp 
+                                                   # spoofing. No aporta nada.
+
                         # Si la MAC está repetida, probablemente haya spoofing
                         foreach my $tmpip (keys %$ip_list){
-                            if (($ip_list->{$tmpip} eq $mac) && ($tmpip ne $ip)){
-                                $message .= ", posiblemente spoofeado desde $tmpip";
+                            if (($ip_list->{$tmpip} eq $mac) &&\
+                                 ($tmpip ne $ip)){
+                                $message .= \
+                                    ", posiblemente spoofeado desde $tmpip";
                             }
                         }
                     }
