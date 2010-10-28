@@ -1,6 +1,22 @@
 #!/usr/bin/env perl
 #
-# SniperlCat
+# SniperlCat 0.2
+#
+#
+# Versión 0.2:
+#  - Los avisos los hace una función a parte
+#  - Añadido archivo de log
+#  - Añadida detección de paquetes SYN sospechosos de sockets RAW =)}
+#   (para usuarios con privilegios)
+#
+# Versión 0.1:
+#  - Detección de nuevos hosts
+#  - Detección de nuevos hosts spoofeados
+#  - Detección de cambios de MAC
+#  - Detección de cambios de MAC debidos a spoofing
+#
+# Usa "libgtk2-notify-perl" para notificar al usuario
+#  y "libnet-pcap-perl" y "libnetpacket-perl" para buscar paquetes sospechosos
 #
 ##############################################################################
 #  Copyright (C) 2010 Kenkeiras <kenkeiras@gmail.com>
@@ -14,18 +30,39 @@
 ##############################################################################
 
 my $appname = "Sniperlcat";
+my $appver = "0.2";
+$timeout = 100;
 $app_icon = "";
 
 $network = "192.168.1.*";
 $verbose = 0;
 $cansino = 0;
+$log = "";
 
 my $go_back = 0;
 my $arp_fill = 1;
 my $file = "";
 my $sltime = 60;
+my $privileged = 0;
+my $dev = "";
+$r_thread = 0;
 
-use Gtk2::Notify -init, "Sniperlcat";
+# Comprueba si es root
+if ($< == 0){
+    $privileged = 1;
+}
+
+
+# Todos los avisos van aquí
+sub show_alert{
+    $message = $_[0];
+    use Gtk2::Notify -init, "Sniperlcat";
+    if ($log ne ""){
+        `echo $message >>  $log`;
+    }
+    my $notification = Gtk2::Notify->new("$appname", "$message","$app_icon");
+    $notification->show();    
+}
 
 # Se va al fondo
 sub daemonize{
@@ -39,21 +76,24 @@ sub daemonize{
 	setsid || die $!;
 }
 
+# Muestra las opciones
 sub show_help{
-        print "$appname\n";
-        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-s <tiempo>]\n";
+        print "$appname $appver\n";
+        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>][-l <log>][-s <tiempo>]\n";
         print "-h  (--help): Muestra este mensaje\n";
         print "-d  (--daemonize): Se ejecuta de fondo\n";
         print "-nf (--no-fill): No llena la tabla de hosts (con nmap) antes de leerla\n";
         print "-c  (--cansino): Repite los avisos, aún los ya emitidos, en cada iteración\n";
         print "-v  (--verbose): Muestra más información por pantalla\n";
         print "-n  (--network): Especifica la red donde se ejecuta, por defecto 192.168.1.0/24\n";
-        print "-f  (--file): Especifica el archivo de red inicial (se obtiene con arp -an)\n";   
-        print "-s  (--sleep): Especifica el tiempo en segundos de \"descanso\" entre iteraciones (por defeto 60)\n";   
+        print "-dv (--device): Especifica la interfaz de red que se monitoreará\n";   
+        print "-p  (--privileged): Se asumirán que es un usuario con privilegios\n";
+        print "-np (--no-privileged): Se asumirán que es un usuario sin privilegios\n";
+        print "-l  (--log): Se guardarán los avisos en un archivo\n";
+        print "-s  (--sleep): Especifica el tiempo en segundos de \"descanso\" entre iteraciones (por defecto 60)\n";
 }
 
 # Comprueba los parámetros
-
 my $i = 0;
 while ($i <= $#ARGV){
     if (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
@@ -72,6 +112,21 @@ while ($i <= $#ARGV){
     elsif (($ARGV[$i] eq "-nf") || ($ARGV[$i] eq "--no-fill")){
         $arp_fill = 0;
     }
+    elsif (($ARGV[$i] eq "-p") || ($ARGV[$i] eq "--privileged")){
+        $privileged = 1;
+    }
+    elsif (($ARGV[$i] eq "-np") || ($ARGV[$i] eq "--no-privileged")){
+        $privileged = 0;
+    }
+    elsif (($ARGV[$i] eq "-l") || ($ARGV[$i] eq "--log")){
+        $i++;
+        if ($i > $#ARGV){
+            print "El archivo de log\n";
+            show_help;
+            exit 1;
+        }
+        $log = $ARGV[$i];
+    }
     elsif (($ARGV[$i] eq "-n") || ($ARGV[$i] eq "--network")){
         $i++;
         if ($i > $#ARGV){
@@ -80,6 +135,13 @@ while ($i <= $#ARGV){
             exit 1;
         }
         $network = $ARGV[$i];
+    }
+    elsif (($ARGV[$i] eq "-dv") || ($ARGV[$i] eq "--device")){
+        $i++;
+        if ($i > $#ARGV){
+            break;
+        }
+        $dev = $ARGV[$i];
     }
     elsif (($ARGV[$i] eq "-f") || ($ARGV[$i] eq "--file")){
         $i++;
@@ -103,7 +165,86 @@ while ($i <= $#ARGV){
     $i++;
 }
 
+# Comprueba si usa el sniffer sin privilegios
+if ((! $privileged) && ($dev ne "")){
+    print "Son necesarios privilegios para el sniffer\n";
+    exit(2);
+}
+
+
 daemonize if $go_back;
+
+# Se activa el sniffer en otro hilo
+if ($privileged){
+    use Net::Pcap;
+    use NetPacket::Ethernet;
+    use NetPacket::IP;
+    use NetPacket::TCP;
+    if ($dev eq ""){
+        print STDERR "No se ha especificado el dispositivo, hay disponibles ";
+        my $err = "";
+        my %devinfo = ();
+        @devs = Net::Pcap::pcap_findalldevs(\%devinfo,\$err);
+        print @devs.":\n";
+        for my $dev (@devs) {
+            print STDERR "$dev : $devinfo{$dev}\n"
+        }
+        exit(1);
+    }
+    use threads;
+    print STDERR "Iniciando sniffer\n" if $verbose;
+    $r_thread = threads->create(raw_sniffer, $dev); # Keeping it simple ^^
+    unless (defined $r_thread){
+        print STDERR "Error creando hilo de sniffer\ns";
+    }
+}
+
+# Sniffer de packetes SYN de sockets RAW
+sub raw_sniffer{
+    my $filter_str = 'tcp and ip[6] & 127 == 0 and tcp[13] == 2'; # Flag SYN arriba y demás abajo, y DF OFF
+    my $dev = $_[0];
+    my $odev = Net::Pcap::open_live($dev, 1500, 0, 0, \$err);
+    my $filter_compiled;
+    unless (defined $odev){
+        print STDERR "\nError [$err] abriendo interfaz en modo promiscuo\n";
+        exit 2;
+    }
+
+    if (Net::Pcap::lookupnet($dev, \$address, \$netmask, \$err)) {
+        die "Error [$err] al buscar información sobre $dev";
+    }
+
+    Net::Pcap::compile($odev, \$filter, $filter_str, 0, $netmask) &&
+     die "Error compilando filtro Pcap";
+
+    Net::Pcap::setfilter($odev, $filter) &&
+     die 'Error aplicando el filtro';
+
+    my $packet, $message, $ip, $ether, $src_ip;
+    my %list, %header;
+    while (1){
+        Net::Pcap::pcap_next_ex($odev, \%header, \$packet);
+        if (length($packet) <= 60){ # "Interesting" packet !! (normalmente 58)
+            $ether = NetPacket::Ethernet::strip($packet);
+            $ip = NetPacket::IP->decode($ether);
+            $src_ip = $ip->{"src_ip"};
+            if (defined $list->{$src_ip}){
+                if (($list->{$src_ip} + $timeout) < time){
+                    delete $list->{$src_ip};
+                }
+            }
+            unless(defined $list->{$src_ip}){
+                $tcp = NetPacket::TCP->decode($ip->{'data'});
+                $message = "Paquete sospechoso desde [".$src_ip.
+                    ":".$tcp->{"src_port"}."] a [".$ip->{"dest_ip"}.":".
+                    $tcp->{"dest_port"}."]";
+                show_alert($message);
+                $list->{$src_ip} = time;
+            }
+        }
+    }
+    Net::Pcap::close($odev); # Aunque nunca llegará aquí
+}
 
 # LLena la tabla arp con nmap
 sub fill_arp_table{
@@ -165,8 +306,7 @@ sub check_list{
                     }
                 }
                 print "$message\n" if $verbose;
-                my $notification = Gtk2::Notify->new("$appname", "$message","$app_icon");
-                $notification->show();
+                show_alert($message);
             }
         }
         else{
@@ -185,8 +325,7 @@ sub check_list{
                         }
                     }
                     print "$message\n" if $verbose;
-                    my $notification = Gtk2::Notify->new("$appname", "$message","$app_icon");
-                    $notification->show();
+                    show_alert($message);
                 }
             }
         }
