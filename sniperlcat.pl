@@ -5,6 +5,7 @@
 # Versión 0.3:
 #
 #  - Los avisos los hace un script a parte
+#  - Corregido al bug que lo volvia paranoico al cerrar el dispositivo
 #
 # Versión 0.2:
 #  - Los avisos los hace una función a parte
@@ -34,7 +35,7 @@
 
 my $appname = "Sniperlcat";
 my $appver = "0.3-dev";
-$timeout = 1;
+$timeout = 100;
 $app_icon = "";
 
 $network = "192.168.1.*";
@@ -80,7 +81,7 @@ sub daemonize{
 # Muestra las opciones
 sub show_help{
         print "$appname $appver\n";
-        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>] [-l <log>] [-s <tiempo>]\n";
+        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>] [-l <log>] [-s <tiempo>] [-t <trigger>]\n";
         print "-h  (--help): Muestra este mensaje\n";
         print "-d  (--daemonize): Se ejecuta de fondo\n";
         print "-nf (--no-fill): No llena la tabla de hosts (con nmap) antes de leerla\n";
@@ -92,6 +93,8 @@ sub show_help{
         print "-np (--no-privileged): Se asumirán que es un usuario sin privilegios\n";
         print "-l  (--log): Se guardarán los avisos en un archivo\n";
         print "-s  (--sleep): Especifica el tiempo en segundos de \"descanso\" entre iteraciones (por defecto 60)\n";
+        print "-t  (--trigger) Especifica el trigger que se disparará en las alertas\n";
+        #print "-p  (--port): Especifica un puerto para esperar conexiones y el mensaje que envia\n";
 }
 
 # Comprueba los parámetros
@@ -161,6 +164,15 @@ while ($i <= $#ARGV){
             exit 1;
         }
         $sltime = $ARGV[$i];
+    }
+    elsif (($ARGV[$i] eq "-t") || ($ARGV[$i] eq "--trigger")){
+        $i++;
+        if ($i > $#ARGV){
+            print "No se ha especificado el trigger\n";
+            show_help;
+            exit 1;
+        }
+        $trigger = $ARGV[$i];
     }
 
     $i++;
