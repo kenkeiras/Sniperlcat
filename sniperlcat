@@ -1,7 +1,10 @@
 #!/usr/bin/env perl
 #
-# SniperlCat 0.2
+# SniperlCat 0.3-dev
 #
+# Versión 0.3:
+#
+#  - Los avisos los hace un script a parte
 #
 # Versión 0.2:
 #  - Los avisos los hace una función a parte
@@ -30,14 +33,14 @@
 ##############################################################################
 
 my $appname = "Sniperlcat";
-my $appver = "0.2";
+my $appver = "0.3-dev";
 $timeout = 100;
 $app_icon = "";
 
 $network = "192.168.1.*";
 $verbose = 0;
 $cansino = 0;
-$log = "";
+$trigger = "./trigger";
 
 my $go_back = 0;
 my $arp_fill = 1;
@@ -56,12 +59,9 @@ if ($< == 0){
 # Todos los avisos van aquí
 sub show_alert{
     $message = $_[0];
-    use Gtk2::Notify -init, "Sniperlcat";
-    if ($log ne ""){
-        `echo $message >>  $log`;
-    }
-    my $notification = Gtk2::Notify->new("$appname", "$message","$app_icon");
-    $notification->show();    
+    open(T, "| $trigger")
+    print T "$message";
+    close(T);
 }
 
 # Se va al fondo
