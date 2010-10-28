@@ -34,13 +34,13 @@
 
 my $appname = "Sniperlcat";
 my $appver = "0.3-dev";
-$timeout = 100;
+$timeout = 1;
 $app_icon = "";
 
 $network = "192.168.1.*";
 $verbose = 0;
 $cansino = 0;
-$trigger = "./trigger";
+$trigger = "./trigger.sh";
 
 my $go_back = 0;
 my $arp_fill = 1;
@@ -59,9 +59,9 @@ if ($< == 0){
 # Todos los avisos van aquí
 sub show_alert{
     $message = $_[0];
+    print STDERR "$message\n" if $verbose;
     open(T, "| $trigger");
-
-    print T "$message";
+    print T "$message\n";
     close(T);
 }
 
@@ -226,7 +226,22 @@ sub raw_sniffer{
     my %list, %header;
     while (1){
         Net::Pcap::pcap_next_ex($odev, \%header, \$packet);
-        if (length($packet) <= 60){ # "Interesting" packet !! (normalmente 58)
+        if (length($packet) < 1){ # Interfaz desconectada
+            do{ sleep $timeout;
+                $odev = Net::Pcap::open_live($dev, 1500, 0, 0, \$err);
+            }while(! defined $odev);
+
+            if (Net::Pcap::lookupnet($dev, \$address, \$netmask, \$err)) {
+                die "Error [$err] al buscar información sobre $dev";
+            }
+            
+            Net::Pcap::compile($odev, \$filter, $filter_str, 0, $netmask) &&
+             die "Error compilando filtro Pcap";
+
+            Net::Pcap::setfilter($odev, $filter) &&
+             die 'Error aplicando el filtro';
+        }
+        elsif (length($packet) < 60){# "Interesting" packet !! (normalmente 58)
             $ether = NetPacket::Ethernet::strip($packet);
             $ip = NetPacket::IP->decode($ether);
             $src_ip = $ip->{"src_ip"};
