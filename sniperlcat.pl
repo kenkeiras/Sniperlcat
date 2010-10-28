@@ -6,6 +6,7 @@
 #
 #  - Los avisos los hace un script a parte
 #  - Corregido al bug que lo volvia paranoico al cerrar el dispositivo
+#  - Añadida la opción de puerto a la escucha
 #
 # Versión 0.2:
 #  - Los avisos los hace una función a parte
@@ -19,8 +20,7 @@
 #  - Detección de cambios de MAC
 #  - Detección de cambios de MAC debidos a spoofing
 #
-# Usa "libgtk2-notify-perl" para notificar al usuario
-#  y "libnet-pcap-perl" y "libnetpacket-perl" para buscar paquetes sospechosos
+# Usa "libnet-pcap-perl" y "libnetpacket-perl" para buscar paquetes
 #
 ##############################################################################
 #  Copyright (C) 2010 Kenkeiras <kenkeiras@gmail.com>
@@ -33,15 +33,19 @@
 #  See http://sam.zoy.org/wtfpl/COPYING for more details.
 ##############################################################################
 
+use threads;
+use Socket;
+
 my $appname = "Sniperlcat";
 my $appver = "0.3-dev";
-$timeout = 100;
+$timeout = 60;
 $app_icon = "";
 
 $network = "192.168.1.*";
 $verbose = 0;
 $cansino = 0;
 $trigger = "./trigger.sh";
+$log = "";
 
 my $go_back = 0;
 my $arp_fill = 1;
@@ -49,7 +53,7 @@ my $file = "";
 my $sltime = 60;
 my $privileged = 0;
 my $dev = "";
-$r_thread = 0;
+my $r_thread = 0;
 
 # Comprueba si es root
 if ($< == 0){
@@ -64,24 +68,49 @@ sub show_alert{
     open(T, "| $trigger");
     print T "$message\n";
     close(T);
+    if ("$log" ne "" ){
+        open(LOG, ">>$log");
+        print LOG "$message\n";
+        close(LOG);
+    }
 }
 
 # Se va al fondo
 sub daemonize{
     $verbose = 0;
-	umask 0;
-	open STDIN, "</dev/null" || die $!;
-	open STDOUT,">>/dev/null" || die $!;
-	open STDERR, ">>/dev/null" || die $!;
-	defined ($pid=fork) || die $!;
-	exit if $pid;
-	setsid || die $!;
+    umask 0;
+    open STDIN, "</dev/null" || die $!;
+    open STDOUT,">>/dev/null" || die $!;
+    open STDERR, ">>/dev/null" || die $!;
+    defined ($pid = fork) || die $!;
+    exit if $pid;
+    setsid || die $!;
+}
+
+# Escucha el puerto esperando conexiones
+sub port_wait{
+    my $msg = $_[0];
+    my $port = $_[1];
+    my $proto = getprotobyname('tcp');
+    socket(sock, PF_INET, SOCK_STREAM, $proto) || die "socket:$!";
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, pack("l", 1)) ||\
+         die "setsockopt: $!";
+
+    bind(sock, sockaddr_in($port, INADDR_ANY)) || die "bind: $!";
+    listen(sock, 10) || die "listen: $!";
+    while (1){
+        $client = accept(nsock, sock);
+        my($rport, $remote) = sockaddr_in ($client);
+        print nsock "$msg";
+        show_alert("Puerto [$port] conectado desde [".inet_ntoa($remote)."]");
+        close(nsock);
+    }
 }
 
 # Muestra las opciones
 sub show_help{
         print "$appname $appver\n";
-        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>] [-l <log>] [-s <tiempo>] [-t <trigger>]\n";
+        print "sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n <red>] [-f <descriptor de red>] [-p|-np] [-dv <interfaz>] [-l <log>] [-s <tiempo>] [-t <trigger>] [-p <puerto> <mensaje>]\n";
         print "-h  (--help): Muestra este mensaje\n";
         print "-d  (--daemonize): Se ejecuta de fondo\n";
         print "-nf (--no-fill): No llena la tabla de hosts (con nmap) antes de leerla\n";
@@ -94,13 +123,13 @@ sub show_help{
         print "-l  (--log): Se guardarán los avisos en un archivo\n";
         print "-s  (--sleep): Especifica el tiempo en segundos de \"descanso\" entre iteraciones (por defecto 60)\n";
         print "-t  (--trigger) Especifica el trigger que se disparará en las alertas\n";
-        #print "-p  (--port): Especifica un puerto para esperar conexiones y el mensaje que envia\n";
+        print "-pt  (--port): Especifica un puerto para esperar conexiones y el mensaje que envia\n";
 }
 
 # Comprueba los parámetros
 my $i = 0;
 while ($i <= $#ARGV){
-    if (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
+    if    (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
         $go_back = 1;
     }
     elsif (($ARGV[$i] eq "-h") || ($ARGV[$i] eq "--help")){
@@ -125,7 +154,7 @@ while ($i <= $#ARGV){
     elsif (($ARGV[$i] eq "-l") || ($ARGV[$i] eq "--log")){
         $i++;
         if ($i > $#ARGV){
-            print "El archivo de log\n";
+            print "No se ha especificado el archivo de log\n";
             show_help;
             exit 1;
         }
@@ -174,6 +203,29 @@ while ($i <= $#ARGV){
         }
         $trigger = $ARGV[$i];
     }
+    elsif (($ARGV[$i] eq "-pt") || ($ARGV[$i] eq "--port")){
+        $i++;
+        if ($i > $#ARGV){
+            print "No se ha especificado el puerto\n";
+            show_help;
+            exit 1;
+        }
+        my $port = $ARGV[$i];;
+
+        $i++;
+        if ($i > $#ARGV){
+            print "No se ha especificado el mensaje\n";
+            show_help;
+            exit 1;
+        }
+        my $msg = $ARGV[$i];
+
+        $r_thread = threads->create('port_wait', ($msg, $port)); # Keeping it simple ^^
+        unless (defined $r_thread){
+            print STDERR "Error creando hilo de escucha en el puerto\n";
+            exit(2);
+        }
+    }
 
     $i++;
 }
@@ -204,11 +256,10 @@ if ($privileged){
         }
         exit(1);
     }
-    use threads;
     print STDERR "Iniciando sniffer\n" if $verbose;
-    $r_thread = threads->create(raw_sniffer, $dev); # Keeping it simple ^^
+    $r_thread = threads->create('raw_sniffer', $dev); # Keeping it simple ^^
     unless (defined $r_thread){
-        print STDERR "Error creando hilo de sniffer\ns";
+        print STDERR "Error creando hilo de sniffer\n";
     }
 }
 
