@@ -250,7 +250,7 @@ sub raw_sniffer{
 
 # LLena la tabla arp con nmap
 sub fill_arp_table{
-    `nmap $network -sP 2>/dev/null 1>/dev/null`;
+    `nmap $network -sP -n 2>/dev/null 1>/dev/null`;
 }
 
 # Carga la tabla arp de un archivo
