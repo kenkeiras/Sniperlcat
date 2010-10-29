@@ -2,22 +2,22 @@
 
 <h2>SniperlCat</h2><br />
 Command line options:<br />
-./sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n &lt;network&gt;] [-f &lt;network device&gt;]
-&nbsp;&nbsp;&nbsp;[-p|-np] [-dv &lt;interface&gt;] [-l &lt;log&gt;] [-s &lt;time&gt;] [-t &lt;trigger&gt;]
-&nbsp;&nbsp;&nbsp;[-p &lt;port&gt; &lt;message&gt;]
--h (--help): Shows this.
--d (--daemonize): Runs in the background
--nf (--no-fill): Don't fille the host table (with nmap) before reading it
--c (--cansino): Repeats the warnings, even the emited before, 
-&nbsp;&nbsp;&nbsp;in every iteration
--v (--verbose): Shows more information in the screen
--n (--network): Specifies the network, 192.168.1.0/24 by default
--dv (--device): Specifies the network interface that will be monitored
--p (--privileged): It asumes that it has privileges
--np (--no-privileged): It asumes that it doesn't have privileges
--l (--log):  The warnings will be logged
--s (--sleep): Specifies the time in seconds for "sleeping" between iterations
--t (--trigger) Specifies the alert trigger
--pt (--port): Specifies a port to listen for connections and the message
-&nbsp;&nbsp;&nbsp; it will send
+./sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n &lt;network&gt;] [-f &lt;network device&gt;]<br />
+&nbsp;&nbsp;&nbsp;[-p|-np] [-dv &lt;interface&gt;] [-l &lt;log&gt;] [-s &lt;time&gt;] [-t &lt;trigger&gt;]<br />
+&nbsp;&nbsp;&nbsp;[-p &lt;port&gt; &lt;message&gt;]<br />
+-h (--help): Shows this<br />
+-d (--daemonize): Runs in the background<br />
+-nf (--no-fill): Don't fille the host table (with nmap) before reading it<br />
+-c (--cansino): Repeats the warnings, even the emited before, <br />
+&nbsp;&nbsp;&nbsp;in every iteration<br />
+-v (--verbose): Shows more information in the screen<br />
+-n (--network): Specifies the network, 192.168.1.0/24 by default<br />
+-dv (--device): Specifies the network interface that will be monitored<br />
+-p (--privileged): It asumes that it has privileges<br />
+-np (--no-privileged): It asumes that it doesn't have privileges<br />
+-l (--log):  The warnings will be logged<br />
+-s (--sleep): Specifies the time in seconds for "sleeping" between iterations<br />
+-t (--trigger) Specifies the alert trigger<br />
+-pt (--port): Specifies a port to listen for connections and the message<br />
+&nbsp;&nbsp;&nbsp; it will send<br />
 =end html
