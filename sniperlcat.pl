@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-# SniperlCat 0.3-dev
+# SniperlCat 0.3
 #
 # Versión 0.3:
 #
@@ -37,7 +37,7 @@ use threads;
 use Socket;
 
 my $appname = "Sniperlcat";
-my $appver = "0.3-dev";
+my $appver = "0.3";
 $timeout = 60;
 $app_icon = "";
 
@@ -46,6 +46,7 @@ $verbose = 0;
 $cansino = 0;
 $trigger = "./trigger.sh";
 $log = "";
+$backlog = 10;
 
 my $go_back = 0;
 my $arp_fill = 1;
@@ -97,11 +98,14 @@ sub port_wait{
          die "setsockopt: $!";
 
     bind(sock, sockaddr_in($port, INADDR_ANY)) || die "bind: $!";
-    listen(sock, 10) || die "listen: $!";
+    listen(sock, $backlog) || die "listen: $!";
+    my $l = length($msg) > 0;
     while (1){
         $client = accept(nsock, sock);
         my($rport, $remote) = sockaddr_in ($client);
-        print nsock "$msg";
+        if ($l){
+            print nsock "$msg\n";
+        }
         show_alert("Puerto [$port] conectado desde [".inet_ntoa($remote)."]");
         close(nsock);
     }
@@ -210,7 +214,7 @@ while ($i <= $#ARGV){
             show_help;
             exit 1;
         }
-        my $port = $ARGV[$i];;
+        my $port = $ARGV[$i];
 
         $i++;
         if ($i > $#ARGV){
