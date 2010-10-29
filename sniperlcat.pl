@@ -100,13 +100,19 @@ sub port_wait{
     bind(sock, sockaddr_in($port, INADDR_ANY)) || die "bind: $!";
     listen(sock, $backlog) || die "listen: $!";
     my $l = length($msg) > 0;
+    my $lastip = 0;
+    my $lastconn = 0;
     while (1){
         $client = accept(nsock, sock);
         my($rport, $remote) = sockaddr_in ($client);
         if ($l){
             print nsock "$msg\n";
         }
-        show_alert("Puerto [$port] conectado desde [".inet_ntoa($remote)."]");
+        if (($lastip == $remote) && (($lastconn + $timeout) < time)){
+            $lastip = $remote;
+            $lastconn = time;
+            show_alert("Puerto [$port] conectado desde [".inet_ntoa($remote)."]");
+        }
         close(nsock);
     }
 }
