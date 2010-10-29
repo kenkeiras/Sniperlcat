@@ -1,0 +1,22 @@
+=begin html
+<h2>SniperlCat</h2><br />
+Command line options:<br />
+./sniperlcat [-h]|[-d | -v ] [-nf] [-c] [-n &lt;network&gt;] [-f &lt;network device&gt;]
+&nbsp;&nbsp;&nbsp;[-p|-np] [-dv &lt;interface&gt;] [-l &lt;log&gt;] [-s &lt;time&gt;] [-t &lt;trigger&gt;]
+&nbsp;&nbsp;&nbsp;[-p &lt;port&gt; &lt;message&gt;]
+-h (--help): Shows this.
+-d (--daemonize): Runs in the background
+-nf (--no-fill): Don't fille the host table (with nmap) before reading it
+-c (--cansino): Repeats the warnings, even the emited before, 
+&nbsp;&nbsp;&nbsp;in every iteration
+-v (--verbose): Shows more information in the screen
+-n (--network): Specifies the network, 192.168.1.0/24 by default
+-dv (--device): Specifies the network interface that will be monitored
+-p (--privileged): It asumes that it has privileges
+-np (--no-privileged): It asumes that it doesn't have privileges
+-l (--log):  The warnings will be logged
+-s (--sleep): Specifies the time in seconds for "sleeping" between iterations
+-t (--trigger) Specifies the alert trigger
+-pt (--port): Specifies a port to listen for connections and the message
+&nbsp;&nbsp;&nbsp; it will send
+=end html
