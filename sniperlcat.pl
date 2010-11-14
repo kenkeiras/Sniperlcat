@@ -35,19 +35,19 @@
 
 use threads;
 use Socket;
-#use strict;
+use strict;
 
 my $appname = "Sniperlcat";
 my $appver = "0.3";
-$timeout = 60;
-$app_icon = "";
+our $timeout = 60;
+our $app_icon = "";
 
-$network = "192.168.1.*";
-$verbose = 0;
-$cansino = 0;
-$trigger = "./trigger.sh";
-$log = "";
-$backlog = 10;
+our $network = "192.168.1.*";
+our $verbose = 0;
+our $cansino = 0;
+our $trigger = "./trigger.sh";
+our $log = "";
+our $backlog = 10;
 
 my $arp_fill = 1;
 my $file = "";
@@ -61,10 +61,22 @@ if ($< == 0){
     $privileged = 1;
 }
 
+# Muestra la lista de dispositivos disponibles
+sub selectdev{
+        print STDERR "No se ha especificado el dispositivo, hay disponibles ";
+        my $err = "";
+        my %devinfo = ();
+        my @devs;
+        @devs = Net::Pcap::pcap_findalldevs(\%devinfo,\$err);
+        print @devs.":\n";
+        for my $dev (@devs) {
+            print STDERR "$dev : $devinfo{$dev}\n"
+        }
+}
 
 # Todos los avisos van aquí
 sub show_alert{
-    $message = $_[0];
+    my $message = $_[0];
     print STDERR "$message\n" if $verbose;
     open(T, "| $trigger");
     print T "$message\n";
@@ -83,9 +95,9 @@ sub daemonize{
     open STDIN, "</dev/null" || die $!;
     open STDOUT,">>/dev/null" || die $!;
     open STDERR, ">>/dev/null" || die $!;
-    defined ($pid = fork) || die $!;
+    defined (my $pid = fork) || die $!;
     exit if $pid;
-    setsid || die $!;
+    setsid() || die $!;
 }
 
 # Escucha el puerto esperando conexiones
@@ -103,6 +115,7 @@ sub port_wait{
     my $lastip = 0;
     my $lastconn = 0;
     my $lastport = 0;
+    my $client;
     my $alert;
     while (1){
         $client = accept(nsock, sock);
@@ -196,7 +209,8 @@ while ($i <= $#ARGV){
     elsif (($ARGV[$i] eq "-dv") || ($ARGV[$i] eq "--device")){
         $i++;
         if ($i > $#ARGV){
-            break;
+            selectdev();
+            exit(1);
         }
         $dev = $ARGV[$i];
     }
@@ -273,14 +287,7 @@ if ($privileged){
     use NetPacket::IP;
     use NetPacket::TCP;
     if ($dev eq ""){
-        print STDERR "No se ha especificado el dispositivo, hay disponibles ";
-        my $err = "";
-        my %devinfo = ();
-        @devs = Net::Pcap::pcap_findalldevs(\%devinfo,\$err);
-        print @devs.":\n";
-        for my $dev (@devs) {
-            print STDERR "$dev : $devinfo{$dev}\n"
-        }
+        selectdev();
         exit(1);
     }
     print STDERR "Iniciando sniffer\n" if $verbose;
@@ -292,11 +299,15 @@ if ($privileged){
 
 # Sniffer de packetes SYN de sockets RAW
 sub raw_sniffer{
+    my $err;
     # Flag SYN arriba y demás abajo, y DF OFF
     my $filter_str = 'tcp and ip[6] & 127 == 0 and tcp[13] == 2'; 
     my $dev = $_[0];
     my $odev = Net::Pcap::open_live($dev, 1500, 0, 0, \$err);
     my $filter_compiled;
+    my $address;
+    my $netmask;
+    my $filter;
     unless (defined $odev){
         print STDERR "\nError [$err] abriendo interfaz en modo promiscuo\n";
         exit 2;
@@ -312,8 +323,15 @@ sub raw_sniffer{
     Net::Pcap::setfilter($odev, $filter) &&
      die 'Error aplicando el filtro';
 
-    my $packet, $message, $ip, $ether, $src_ip;
-    my %list, %header;
+    my $packet;
+    my $message;
+    my $ip;
+    my $ether;
+    my $src_ip;
+    my $tcp;
+    my $list;
+
+    my %header;
     while (1){
         Net::Pcap::pcap_next_ex($odev, \%header, \$packet);
         if (length($packet) < 1){ # Interfaz desconectada
@@ -363,17 +381,17 @@ sub load_arp_desc{
     my %tmplist = ();
     my $arp = $_[0];
     my @lines = split(/\n/,$arp);
-    my $ip,$mac,$i = 0;
+    my $i = 0;
     my $max = @lines;
     while ($i < $max){
         # Extrae la IP
-        @line = split(/ /,@lines[$i]);
-        @ip = split(/\(/,$line[1]);
+        my @line = split(/ /,@lines[$i]);
+        my @ip = split(/\(/,$line[1]);
         @ip = split(/\)/,@ip[1]);
-        $ip = @ip[0];
+        my $ip = @ip[0];
 
         # Y la MAC
-        $mac = $line[3];
+        my $mac = $line[3];
 
         # Y se introduce en la lista si es una MAC válida
         if (substr("$mac", 0, 1) ne "<"){
@@ -457,7 +475,7 @@ else{
     local $/=undef;
     open MYFILE, "$file" or die "Couldn't open file: $!";
     binmode MYFILE;
-    $arp = <MYFILE>;
+    my $arp = <MYFILE>;
     close MYFILE;
     %ip_list = load_arp_desc("$arp");
 }
