@@ -36,6 +36,7 @@
 use threads;
 use Socket;
 use strict;
+use POSIX qw(setsid);
 
 my $appname = "Sniperlcat";
 my $appver = "0.3";
@@ -97,7 +98,7 @@ sub daemonize{
     open STDERR, ">>/dev/null" || die $!;
     defined (my $pid = fork) || die $!;
     exit if $pid;
-    setsid() || die $!;
+    setsid || die $!;
 }
 
 # Escucha el puerto esperando conexiones
