@@ -12,6 +12,7 @@ Command line options:<br />
 &nbsp;&nbsp;&nbsp;in every iteration<br />
 -v (--verbose): Shows more information in the screen<br />
 -n (--network): Specifies the network, 192.168.1.0/24 by default<br />
+-f  (--file): Specifies the network descriptor (a `arp -a` output)<br />
 -dv (--device): Specifies the network interface that will be monitored<br />
 -p (--privileged): It asumes that it has privileges<br />
 -np (--no-privileged): It asumes that it doesn't have privileges<br />
@@ -20,4 +21,3 @@ Command line options:<br />
 -t (--trigger) Specifies the alert trigger<br />
 -pt (--port): Specifies a port to listen for connections and the message<br />
 &nbsp;&nbsp;&nbsp; it will send<br />
-=end html
