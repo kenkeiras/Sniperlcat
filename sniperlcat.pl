@@ -35,6 +35,7 @@
 
 use threads;
 use Socket;
+#use strict;
 
 my $appname = "Sniperlcat";
 my $appver = "0.3";
@@ -48,7 +49,6 @@ $trigger = "./trigger.sh";
 $log = "";
 $backlog = 10;
 
-my $go_back = 0;
 my $arp_fill = 1;
 my $file = "";
 my $sltime = 60;
@@ -102,17 +102,22 @@ sub port_wait{
     my $l = length($msg) > 0;
     my $lastip = 0;
     my $lastconn = 0;
+    my $lastport = 0;
+    my $alert;
     while (1){
         $client = accept(nsock, sock);
         my($rport, $remote) = sockaddr_in ($client);
         if ($l){
             print nsock "$msg\n";
         }
-        if (($lastip == $remote) && (($lastconn + $timeout) < time)){
+        if (($lastip != $remote) || (($lastconn + $timeout) < time)){
             $lastip = $remote;
             $lastconn = time;
-            show_alert("Puerto [$port] conectado desde [".inet_ntoa($remote)."]");
+            $alert = "Puerto [$port] conectado desde [".inet_ntoa($remote)."]";
+            show_alert($alert);
+            print "->"."Puerto [$port] conectado desde [".inet_ntoa($remote)."]"."\n";
         }
+
         close(nsock);
     }
 }
@@ -127,6 +132,7 @@ sub show_help{
         print "-c  (--cansino): Repite los avisos, aún los ya emitidos, en cada iteración\n";
         print "-v  (--verbose): Muestra más información por pantalla\n";
         print "-n  (--network): Especifica la red donde se ejecuta, por defecto 192.168.1.0/24\n";
+        print "-f  (--file): Especifica el descriptor de red (como salida de arp -a)";
         print "-dv (--device): Especifica la interfaz de red que se monitoreará\n";   
         print "-p  (--privileged): Se asumirán que es un usuario con privilegios\n";
         print "-np (--no-privileged): Se asumirán que es un usuario sin privilegios\n";
@@ -138,11 +144,19 @@ sub show_help{
 
 # Comprueba los parámetros
 my $i = 0;
-while ($i <= $#ARGV){
+
+# Primero comprueba si hay que daemonizarlo para evitar problemas con los hilos
+while ($i <= $#ARGV){ 
     if    (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
-        $go_back = 1;
+        daemonize();
     }
-    elsif (($ARGV[$i] eq "-h") || ($ARGV[$i] eq "--help")){
+    $i++;
+}
+
+# Después el los parámetros de valores
+$i = 0;
+while ($i <= $#ARGV){
+    if (($ARGV[$i] eq "-h") || ($ARGV[$i] eq "--help")){
         show_help;
         exit 0;
     }
@@ -213,7 +227,13 @@ while ($i <= $#ARGV){
         }
         $trigger = $ARGV[$i];
     }
-    elsif (($ARGV[$i] eq "-pt") || ($ARGV[$i] eq "--port")){
+    $i++;
+}
+
+# Y por último los que lanzan hilos
+$i = 0;
+while ($i <= $#ARGV){
+    if (($ARGV[$i] eq "-pt") || ($ARGV[$i] eq "--port")){
         $i++;
         if ($i > $#ARGV){
             print "No se ha especificado el puerto\n";
@@ -245,9 +265,6 @@ if ((! $privileged) && ($dev ne "")){
     print "Son necesarios privilegios para el sniffer\n";
     exit(2);
 }
-
-
-daemonize if $go_back;
 
 # Se activa el sniffer en otro hilo
 if ($privileged){
@@ -395,7 +412,6 @@ sub check_list{
                         }
                     }
                 }
-                print "$message\n" if $verbose;
                 show_alert($message);
             }
         }
@@ -419,7 +435,6 @@ sub check_list{
                             }
                         }
                     }
-                    print "$message\n" if $verbose;
                     show_alert($message);
                 }
             }
