@@ -1,6 +1,11 @@
 #!/usr/bin/env perl
 #
-# SniperlCat 0.3
+# SniperlCat 0.3.1
+#
+# Versión 0.3.1:
+#
+#  - Pasado a perl estricto
+#  - Corregido bug en el parseo de flags en la línea de comandos
 #
 # Versión 0.3:
 #
@@ -21,6 +26,7 @@
 #  - Detección de cambios de MAC debidos a spoofing
 #
 # Usa "libnet-pcap-perl" y "libnetpacket-perl" para buscar paquetes
+# y "nmap" para llenar la tabla ARP
 #
 ##############################################################################
 #  Copyright (C) 2010 Kenkeiras <kenkeiras@gmail.com>
@@ -33,29 +39,28 @@
 #  See http://sam.zoy.org/wtfpl/COPYING for more details.
 ##############################################################################
 
-use threads;
-use Socket;
-use strict;
-use POSIX qw(setsid);
+use threads; # Multihilo 
+use Socket;  # Conexiones de red
+use strict;  # Perl estricto
+use POSIX qw(setsid); # setsid (para la daemonización)
 
-my $appname = "Sniperlcat";
-my $appver = "0.3";
-our $timeout = 60;
-our $app_icon = "";
+my $appname = "Sniperlcat"; # Nombre del script
+my $appver = "0.3.1";       # Versión del script
+our $timeout = 60;          # Timeout
 
-our $network = "192.168.1.*";
-our $verbose = 0;
-our $cansino = 0;
-our $trigger = "./trigger.sh";
-our $log = "";
-our $backlog = 10;
+our $network = "192.168.1.*";  # Red que se escaneará con nmap
+our $verbose = 0;              # Se mostrará información por el terminal
+our $cansino = 0;              # Se repetirán los avisos
+our $trigger = "./trigger.sh"; # Comando que se activará para mandar mensajes
+our $log = "";                 # Archivo donde se guardará el log
+our $backlog = 10;             # Número de conexiones entrantes concurrentes
 
-my $arp_fill = 1;
-my $file = "";
-my $sltime = 60;
-my $privileged = 0;
-my $dev = "";
-my $r_thread = 0;
+my $arp_fill = 1;   # Se llenará la tabla ARP (con nmap)
+my $file = "";      # Tabla ARP predefinida
+my $sltime = 60;    # Tiempo que se esperará entre cada comprobación
+my $privileged = 0; # Si el usuario tiene privilegios de root
+my $dev = "";       # Dispositivo para sniffar paquetes
+my $r_thread = 0;   # [placeholder]
 
 # Comprueba si es root
 if ($< == 0){
@@ -65,10 +70,14 @@ if ($< == 0){
 # Muestra la lista de dispositivos disponibles
 sub selectdev{
         print STDERR "No se ha especificado el dispositivo, hay disponibles ";
-        my $err = "";
-        my %devinfo = ();
-        my @devs;
+        my $err = "";     # Error
+        my %devinfo = (); # Información del dispositivo
+        my @devs;         # Dispositivos
+
+        # Obtiene la lista de todos los dispositivos
         @devs = Net::Pcap::pcap_findalldevs(\%devinfo,\$err);
+
+        # Y la muestra
         print @devs.":\n";
         for my $dev (@devs) {
             print STDERR "$dev : $devinfo{$dev}\n"
@@ -77,13 +86,13 @@ sub selectdev{
 
 # Todos los avisos van aquí
 sub show_alert{
-    my $message = $_[0];
+    my $message = $_[0];                   # Mensaje que se enviará
     print STDERR "$message\n" if $verbose;
-    open(T, "| $trigger");
-    print T "$message\n";
+    open(T, "| $trigger");  # Activa el trigger
+    print T "$message\n";   # Le envía el mensaje
     close(T);
-    if ("$log" ne "" ){
-        open(LOG, ">>$log");
+    if ("$log" ne "" ){ # Si se está guardando log
+        open(LOG, ">>$log");     # Añade el mensaje
         print LOG "$message\n";
         close(LOG);
     }
@@ -91,8 +100,7 @@ sub show_alert{
 
 # Se va al fondo
 sub daemonize{
-    $verbose = 0;
-    umask 0;
+    umask 0; 
     open STDIN, "</dev/null" || die $!;
     open STDOUT,">>/dev/null" || die $!;
     open STDERR, ">>/dev/null" || die $!;
@@ -103,8 +111,8 @@ sub daemonize{
 
 # Escucha el puerto esperando conexiones
 sub port_wait{
-    my $msg = $_[0];
-    my $port = $_[1];
+    my $msg = $_[0];  # Mensaje que se enviará
+    my $port = $_[1]; # Puerto que se 
     my $proto = getprotobyname('tcp');
     socket(sock, PF_INET, SOCK_STREAM, $proto) || die "socket:$!";
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, pack("l", 1)) ||\
@@ -159,16 +167,6 @@ sub show_help{
 # Comprueba los parámetros
 my $i = 0;
 
-# Primero comprueba si hay que daemonizarlo para evitar problemas con los hilos
-while ($i <= $#ARGV){ 
-    if    (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
-        daemonize();
-    }
-    $i++;
-}
-
-# Después el los parámetros de valores
-$i = 0;
 while ($i <= $#ARGV){
     if (($ARGV[$i] eq "-h") || ($ARGV[$i] eq "--help")){
         show_help;
@@ -245,7 +243,16 @@ while ($i <= $#ARGV){
     $i++;
 }
 
-# Y por último los que lanzan hilos
+$i = 0;
+# Y si hay que daemonizarlo para evitar problemas con los hilos
+while ($i <= $#ARGV){ 
+    if    (($ARGV[$i] eq "-d") || ($ARGV[$i] eq "--daemonize")){
+        daemonize();
+    }
+    $i++;
+}
+
+# Por último los flags que lanzan hilos
 $i = 0;
 while ($i <= $#ARGV){
     if (($ARGV[$i] eq "-pt") || ($ARGV[$i] eq "--port")){
@@ -292,7 +299,7 @@ if ($privileged){
         exit(1);
     }
     print STDERR "Iniciando sniffer\n" if $verbose;
-    $r_thread = threads->create('raw_sniffer', $dev); # Keeping it simple ^^
+    $r_thread = threads->create('raw_sniffer', $dev); #Crea un hilo de sniffer
     unless (defined $r_thread){
         print STDERR "Error creando hilo de sniffer\n";
     }
@@ -314,54 +321,59 @@ sub raw_sniffer{
         exit 2;
     }
 
+    # Lee los datos de la red
     if (Net::Pcap::lookupnet($dev, \$address, \$netmask, \$err)) {
         die "Error [$err] al buscar información sobre $dev";
     }
-
+    
+    # Compila el filtro Pcap
     Net::Pcap::compile($odev, \$filter, $filter_str, 0, $netmask) &&
      die "Error compilando filtro Pcap";
 
+    # Aplica el filtro al dispositivo
     Net::Pcap::setfilter($odev, $filter) &&
      die 'Error aplicando el filtro';
 
     my $packet;
-    my $message;
-    my $ip;
-    my $ether;
-    my $src_ip;
-    my $tcp;
     my $list;
 
     my %header;
     while (1){
+        # Lee el siguiente paquete
         Net::Pcap::pcap_next_ex($odev, \%header, \$packet);
-        if (length($packet) < 1){ # Interfaz desconectada
+
+        if (length($packet) < 1){ # Si se desconecta el interfaz
             do{ sleep $timeout;
                 $odev = Net::Pcap::open_live($dev, 1500, 0, 0, \$err);
             }while(! defined $odev);
 
+            # Lee los datos de la red
             if (Net::Pcap::lookupnet($dev, \$address, \$netmask, \$err)) {
                 die "Error [$err] al buscar información sobre $dev";
             }
             
+            # Compila el filtro Pcap
             Net::Pcap::compile($odev, \$filter, $filter_str, 0, $netmask) &&
              die "Error compilando filtro Pcap";
 
+            # Aplica el filtro al dispositivo
             Net::Pcap::setfilter($odev, $filter) &&
              die 'Error aplicando el filtro';
         }
-        elsif (length($packet) < 60){# "Interesting" packet !! (normalmente 58)
-            $ether = NetPacket::Ethernet::strip($packet);
-            $ip = NetPacket::IP->decode($ether);
-            $src_ip = $ip->{"src_ip"};
-            if (defined $list->{$src_ip}){
-                if (($list->{$src_ip} + $timeout) < time){
+        elsif (length($packet) < 60){# Paquete TCP extraño
+
+            my $ether = NetPacket::Ethernet::strip($packet); # Lee la trama
+            my $ip = NetPacket::IP->decode($ether);  # Extrae el paquete IP
+            my $src_ip = $ip->{"src_ip"};
+            if (defined $list->{$src_ip}){ # Si es una IP ya "conocida"
+                                           # comprueba si ya pasó suficiente
+                if (($list->{$src_ip} + $timeout) < time){ 
                     delete $list->{$src_ip};
                 }
             }
             unless(defined $list->{$src_ip}){
-                $tcp = NetPacket::TCP->decode($ip->{'data'});
-                $message = "Paquete sospechoso desde [".$src_ip.
+                my $tcp = NetPacket::TCP->decode($ip->{'data'});
+                my $message = "Paquete sospechoso desde [".$src_ip.
                     ":".$tcp->{"src_port"}."] a [".$ip->{"dest_ip"}.":".
                     $tcp->{"dest_port"}."]";
                 show_alert($message);
@@ -462,7 +474,7 @@ sub check_list{
 }
 
 my %ip_list;
-if ($file eq ""){
+if ($file eq ""){ # Si no se especifica una tabla ARP
     if ($arp_fill){
         print STDERR "LLenando lista arp... " if $verbose;
         fill_arp_table;
@@ -472,7 +484,7 @@ if ($file eq ""){
     %ip_list = load_arp_list;
     print STDERR "[OK]\n" if $verbose;
 }
-else{
+else{ # Si se especifica la tabla ARP
     local $/=undef;
     open MYFILE, "$file" or die "Couldn't open file: $!";
     binmode MYFILE;
@@ -482,12 +494,13 @@ else{
 }
 
 my $lastlist = \%ip_list;
+
 while (1){
     if ($arp_fill){
         fill_arp_table;
     }
-    my %tmplist = load_arp_list;
-    check_list(\%ip_list,\%tmplist,$lastlist);
+    my %tmplist = load_arp_list;               # Carga la tabla ARP actual
+    check_list(\%ip_list,\%tmplist,$lastlist); # Comprueba la nueva tabla
     $lastlist = \%tmplist;
     sleep $sltime;
 }
